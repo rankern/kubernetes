@@ -1,0 +1,113 @@
+# Activación de un recurso Service "headless", solo para obtener  el alta
+# de los nombres de Pods en el DNS (para descubrir su IP)
+apiVersion: v1
+kind: Service
+metadata:
+    # Nombre del servicio
+  name: elixir
+spec:
+  clusterIP: None
+  selector:
+      # tiene que coincidir con label definido en pod
+    app: elixir
+  ports:
+  - port: 4369
+---
+#Puesta en marcha de PRIMER Pod sin tolerancia a fallos
+apiVersion: v1
+kind: Pod
+metadata:
+    # Nombre del Pod
+  name: e1
+  labels:
+    app: elixir
+spec:
+  hostname: e1
+  subdomain: elixir
+  dnsPolicy: ClusterFirst
+  # Deshabilitar la tolerancia a fallos en la ejecución del POD
+  restartPolicy: Never
+  containers:
+  - name: elixir
+    image: bitwalker/alpine-elixir
+    env:
+    - name: MIDOMINIODNS
+      value: elixir.default.svc.cluster.local
+    - name: MINOMBREPOD
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: MIPODIP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    command: [ "sh" ]
+       # variables MINOMBREPOD y MIDOMINIODNS asignada previamente
+       # para pasar el FQDN de DNS a los nodos Elixir
+    args: [  "/programa/run_elixir.sh", "$(MINOMBREPOD).$(MIDOMINIODNS)"]
+    ports:
+    - containerPort: 4369
+    volumeMounts:
+        # Montar exportacion de programa-volume
+    - name: programa-volume
+        # en punto de montaje en contenedor
+      mountPath: /programa
+  volumes:
+  - name: programa-volume
+    configMap:
+              # Nombre de ConfigMap que permite inyectar ficheros código desde
+              # directorio "programa". Cargado con fichero elixir_statefulste.h
+      name: cm-elixir
+      items:
+      - key: run_elixir.sh
+        path: run_elixir.sh
+          # para permisos de chmod en contenedor
+        mode: 0777
+      - key: prueba.exs
+        path: prueba.exs
+        mode: 0777
+---
+# Puesta en marcha de SEGUNDO Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2
+  labels:
+    app: elixir
+spec:
+  hostname: e2
+  subdomain: elixir
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+  containers:
+  - name: elixir
+    image: bitwalker/alpine-elixir
+    env:
+    - name: MIDOMINIODNS
+      value: elixir.default.svc.cluster.local
+    - name: MINOMBREPOD
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: MIPODIP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    command: [ "sh" ]
+    args: [  "/programa/run_elixir.sh", "$(MINOMBREPOD).$(MIDOMINIODNS)"]
+    ports:
+    - containerPort: 4369
+    volumeMounts:
+    - name: programa-volume
+      mountPath: /programa
+  volumes:
+  - name: programa-volume
+    configMap:
+      name: cm-elixir
+      items:
+      - key: run_elixir.sh
+        path: run_elixir.sh
+        mode: 0777
+      - key: prueba.exs
+        path: prueba.exs
+        mode: 0777

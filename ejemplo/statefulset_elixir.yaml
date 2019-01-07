@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: elixir
+  labels:
+    app: elixir
+spec:
+  clusterIP: None
+  selector:      # tiene que coincidir con label definido en pod de StatefulSet
+    app: elixir  # Para dar de alta automaticamente en DNS a los PODS ligados
+  ports:
+  - port: 4369
+    name: epmd-port
+    protocol: TCP
+    targetPort: 4369
+  - port: 32000
+    name: elixirnode-port
+    protocol: TCP
+    targetPort: 32000  
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: raft
+spec:
+  serviceName: elixir
+  replicas: 3
+  podManagementPolicy: Parallel   # por defecto seria OrderedReady (secuencial)
+  selector:
+    matchLabels:
+      app: elixir    # tiene que corresponder a .spec.template.metadata.labels
+  template:
+    metadata:
+      labels:
+        app: elixir
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: elixir
+        image: bitwalker/alpine-elixir        # elixir (debian jessie)
+        env:
+        - name: MISUBDOMINIODNS
+          value: elixir.default.svc.cluster.local
+        - name: MINOMBREPOD
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MIPODIP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        command: [ "sh" ]
+        args: [  "/programa/run_elixir.sh", "$(MINOMBREPOD).$(MISUBDOMINIODNS)"]
+        ports:
+        - containerPort: 4369  # puerto por defecto de epmd (elixir distribuido)
+          name: epmd-port
+        - containerPort: 32000   # puerto fijado en parámetros de ejecución
+          name: elixirnode-port
+        volumeMounts:
+          - name: programa-volume
+            mountPath: /programa
+      volumes:
+        - name: programa-volume
+          configMap:
+              # Nombre de ConfigMap que permite inyectar ficheros código desde
+              # directorio "programa". Cargado con fichero elixir_statefulste.sh
+            name: cm-elixir
+            items:
+            - key: run_elixir.sh
+              path: run_elixir.sh
+              mode: 0777            # para chmod en contenedor
+            - key: prueba.exs
+              path: prueba.exs
+              mode: 0777

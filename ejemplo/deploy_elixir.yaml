@@ -1,0 +1,56 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: de
+  labels:
+    run: e
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      run: e
+  template:
+    metadata:
+      labels:
+        run: e
+    spec:
+      containers:
+      # - name: epmd
+      #   image: bitwalker/alpine-elixir
+      #   ports:
+      #   - containerPort: 4369
+      #     name: epmd-port
+      #     command: [ "sh", "/programa/run_epmd.sh" ]
+      #     volumeMounts:
+      #     - name: programa-volume
+      #       mountPath: /programa
+      - name: elixir
+        image: bitwalker/alpine-elixir        # elixir
+        env:
+        - name: MYPODIP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        command: [ "sh" ]
+                # variable MISERVICIO_SERVICE_HOST asignada automaticamente 
+                # del SERVICIO miservicio creado previamente
+        args: [  "/programa/run_elixir.sh", "$(MISERVICIO_SERVICE_HOST)"]
+        ports:
+        - containerPort: 4369
+          name: epmd-port
+        - containerPort: 32000
+          name: elixirnode-port
+        volumeMounts:
+          - name: programa-volume
+            mountPath: /programa
+      volumes:
+        - name: programa-volume
+          configMap:
+            name: cm-elixir   # en memoria se ha cambiado por configmap-programa
+            items:
+            - key: run_elixir.sh
+              path: run_elixir.sh
+              mode: 0777            # para chmod en contenedor
+            - key: prueba.exs
+              path: prueba.exs
+              mode: 0777
